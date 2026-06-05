@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background-color: #080b10;
+  color: #e6edf3;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0d1117; }
+::-webkit-scrollbar-thumb { background: #21262d; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #30363d; }
+
+select option { background: #0d1117; color: #e6edf3; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media print {
+  .no-print { display: none !important; }
+  body { background: white !important; color: black !important; }
+  * { color: black !important; background: white !important; border-color: #ccc !important; }
+}
