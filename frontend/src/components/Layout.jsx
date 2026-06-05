@@ -1,5 +1,12 @@
+import { useState } from 'react'
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, ScanSearch, LogOut } from 'lucide-react'
+import { LayoutDashboard, ScanSearch, LogOut, Sun, Moon } from 'lucide-react'
+
+function getTheme() { return localStorage.getItem('cp_theme') || 'dark' }
+function applyTheme(t) {
+  localStorage.setItem('cp_theme', t)
+  document.documentElement.setAttribute('data-theme', t)
+}
 
 const NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -9,6 +16,13 @@ const NAV = [
 export default function Layout() {
   const navigate = useNavigate()
   const auth = JSON.parse(localStorage.getItem('clearpath_auth') || '{}')
+  const [theme, setThemeState] = useState(getTheme)
+
+  function toggleTheme() {
+    const next = theme === 'dark' ? 'light' : 'dark'
+    applyTheme(next)
+    setThemeState(next)
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
@@ -60,6 +74,18 @@ export default function Layout() {
           <div style={{ padding: '0 14px 10px', fontSize: 12, color: 'var(--tx-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {auth.email}
           </div>
+          <button onClick={toggleTheme} style={{
+            display: 'flex', alignItems: 'center', gap: 9, width: '100%',
+            padding: '8px 14px', borderRadius: 6, background: 'none', border: 'none',
+            color: 'var(--tx-3)', cursor: 'pointer', fontSize: 13,
+            transition: 'color 0.12s', marginBottom: 2,
+          }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--tx-2)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--tx-3)'}
+          >
+            {theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            {theme === 'dark' ? 'Light mode' : 'Dark mode'}
+          </button>
           <button onClick={() => { localStorage.removeItem('clearpath_auth'); navigate('/login') }} style={{
             display: 'flex', alignItems: 'center', gap: 9, width: '100%',
             padding: '8px 14px', borderRadius: 6, background: 'none', border: 'none',
