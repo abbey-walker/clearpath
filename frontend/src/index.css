@@ -1,26 +1,40 @@
 @import "tailwindcss";
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:       #0b0e14;
+  --surface:  #0f1318;
+  --raised:   #141b24;
+  --border:   #1e2530;
+  --border-2: #252d38;
+  --tx:       #e6edf3;
+  --tx-2:     #8b949e;
+  --tx-3:     #3d4450;
+  --accent:   #7b68ee;  /* UI chrome — nav, buttons, logo */
+  --green:    #00e5a0;  /* LOW risk only */
+  --red:      #ff4d4d;
+  --amber:    #ffaa00;
+}
 
 body {
-  margin: 0;
-  background-color: #080b10;
-  color: #e6edf3;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--tx-2);
+  font-family: -apple-system, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: #0d1117; }
-::-webkit-scrollbar-thumb { background: #21262d; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #30363d; }
+button, input, select, textarea { font-family: inherit; font-size: 13px; }
 
-select option { background: #0d1117; color: #e6edf3; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin    { to { transform: rotate(360deg); } }
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
 @media print {
   .no-print { display: none !important; }
-  body { background: white !important; color: black !important; }
-  * { color: black !important; background: white !important; border-color: #ccc !important; }
 }

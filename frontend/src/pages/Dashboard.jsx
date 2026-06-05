@@ -1,61 +1,75 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, AlertCircle, CheckCircle, Search, Clock, TrendingUp } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { getChecks } from '../lib/storage'
 import RiskBadge from '../components/RiskBadge'
+
+const RISK_COLOR = { HIGH: 'var(--red)', MEDIUM: 'var(--amber)', LOW: 'var(--green)' }
+const LAYER_ABBR  = { sanctions: 'S', pep: 'P', adverseMedia: 'A', corporate: 'C', crypto: 'K' }
 
 export default function Dashboard() {
   const navigate = useNavigate()
   const [checks, setChecks] = useState([])
+  useEffect(() => setChecks(getChecks()), [])
 
-  useEffect(() => { setChecks(getChecks()) }, [])
-
-  const stats = {
-    total: checks.length,
-    HIGH: checks.filter(c => c.riskLevel === 'HIGH').length,
-    MEDIUM: checks.filter(c => c.riskLevel === 'MEDIUM').length,
-    LOW: checks.filter(c => c.riskLevel === 'LOW').length,
-  }
+  const total  = checks.length
+  const high   = checks.filter(c => c.riskLevel === 'HIGH').length
+  const medium = checks.filter(c => c.riskLevel === 'MEDIUM').length
+  const low    = checks.filter(c => c.riskLevel === 'LOW').length
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: '1100px' }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '32px' }}>
+    <div style={{ padding: '36px 40px' }}>
+
+      {/* Page header */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 32 }}>
         <div>
-          <h1 style={{ color: '#e6edf3', fontSize: '22px', fontWeight: 700, margin: '0 0 4px' }}>Dashboard</h1>
-          <p style={{ color: '#7d8590', fontSize: '13px', margin: 0 }}>Overview of recent screening activity</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--tx)', letterSpacing: '-0.02em', marginBottom: 3 }}>
+            Dashboard
+          </h1>
+          <p style={{ fontSize: 12, color: 'var(--tx-3)' }}>Risk screening activity</p>
         </div>
-        <button onClick={() => navigate('/checks/new')} style={{ ...S.btnPrimary, display: 'flex', alignItems: 'center', gap: '7px', padding: '9px 18px', fontSize: '13px' }}>
-          <Search size={14} /> New Check
+        <button onClick={() => navigate('/checks/new')} style={S.primaryBtn}>
+          <Plus size={14} strokeWidth={2.5} /> New Check
         </button>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px', marginBottom: '28px' }}>
-        <StatCard label="Total Checks" value={stats.total} icon={<TrendingUp size={16} color="#7d8590" />} />
-        <StatCard label="High Risk" value={stats.HIGH} valueColor="#ff4d4d" icon={<AlertTriangle size={16} color="#ff4d4d" />} />
-        <StatCard label="Medium Risk" value={stats.MEDIUM} valueColor="#ffaa00" icon={<AlertCircle size={16} color="#ffaa00" />} />
-        <StatCard label="Low / Clear" value={stats.LOW} valueColor="#00e5a0" icon={<CheckCircle size={16} color="#00e5a0" />} />
+      {/* Stats row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1, background: 'var(--border)', borderRadius: 8, overflow: 'hidden', marginBottom: 28, border: '1px solid var(--border)' }}>
+        {[
+          { label: 'Total', value: total, color: 'var(--tx)' },
+          { label: 'High risk', value: high, color: 'var(--red)' },
+          { label: 'Medium risk', value: medium, color: 'var(--amber)' },
+          { label: 'Low / clear', value: low, color: 'var(--green)' },
+        ].map(s => (
+          <div key={s.label} style={{ background: 'var(--surface)', padding: '20px 22px' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+              {s.label}
+            </div>
+            <div style={{ fontSize: 36, fontWeight: 700, color: s.color, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
+              {s.value}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '10px' }}>
-        <div style={{ padding: '16px 22px', borderBottom: '1px solid #21262d', display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Clock size={14} color="#7d8590" />
-          <h2 style={{ color: '#e6edf3', fontSize: '14px', fontWeight: 600, margin: 0 }}>Recent Checks</h2>
+      {/* Table */}
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+        <div style={{ padding: '14px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--tx)', letterSpacing: '-0.01em' }}>Recent checks</span>
+          {total > 0 && <span style={{ fontSize: 11, color: 'var(--tx-3)' }}>{total} total</span>}
         </div>
 
         {checks.length === 0 ? (
-          <div style={{ padding: '60px', textAlign: 'center' }}>
-            <Search size={32} color="#21262d" style={{ marginBottom: '12px' }} />
-            <p style={{ color: '#7d8590', fontSize: '14px', margin: '0 0 20px' }}>No checks yet. Run your first screening to get started.</p>
-            <button onClick={() => navigate('/checks/new')} style={{ ...S.btnPrimary, padding: '9px 20px', fontSize: '13px' }}>
-              Run First Check
-            </button>
+          <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+            <p style={{ color: 'var(--tx-3)', marginBottom: 18, fontSize: 13 }}>No checks yet.</p>
+            <button onClick={() => navigate('/checks/new')} style={S.primaryBtn}>Run first check</button>
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                {['Subject', 'DOB', 'Date Run', 'Layers', 'Score', 'Risk', ''].map(h => (
-                  <th key={h} style={{ padding: '11px 20px', textAlign: 'left', color: '#4d5562', fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', borderBottom: '1px solid #21262d' }}>
+              <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                {[['Subject', '30%'], ['DOB', '12%'], ['Layers', '14%'], ['Score', '10%'], ['Risk', '14%'], ['Date', '13%'], ['', '7%']].map(([h, w]) => (
+                  <th key={h} style={{ padding: '9px 20px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '0.07em', textTransform: 'uppercase', width: w }}>
                     {h}
                   </th>
                 ))}
@@ -63,49 +77,39 @@ export default function Dashboard() {
             </thead>
             <tbody>
               {checks.map(c => (
-                <tr
-                  key={c.checkId}
+                <tr key={c.checkId}
                   onClick={() => navigate(`/checks/${c.checkId}`)}
-                  style={{ cursor: 'pointer', borderBottom: '1px solid #161b22' }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#161b22'}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
+                  style={{ borderBottom: '1px solid var(--border)', cursor: 'pointer', transition: 'background 0.08s' }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--raised)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
-                  <td style={{ padding: '13px 20px', color: '#e6edf3', fontSize: '14px', fontWeight: 500 }}>{c.subject?.fullName}</td>
-                  <td style={{ padding: '13px 20px', color: '#7d8590', fontSize: '12px', fontFamily: 'monospace' }}>{c.subject?.dateOfBirth || '—'}</td>
-                  <td style={{ padding: '13px 20px', color: '#7d8590', fontSize: '12px', fontFamily: 'monospace' }}>{new Date(c.createdAt).toLocaleDateString()}</td>
-                  <td style={{ padding: '13px 20px', color: '#4d5562', fontSize: '12px' }}>{c.meta?.layersRun?.length} layers</td>
-                  <td style={{ padding: '13px 20px', fontFamily: 'monospace', fontSize: '14px', fontWeight: 700, color: scoreColor(c.riskLevel) }}>{c.score}</td>
-                  <td style={{ padding: '13px 20px' }}><RiskBadge level={c.riskLevel} /></td>
-                  <td style={{ padding: '13px 20px', color: '#4d5562', fontSize: '12px' }}>View →</td>
+                  <td style={{ padding: '11px 20px', color: 'var(--tx)', fontWeight: 500, fontSize: 13 }}>{c.subject?.fullName}</td>
+                  <td style={{ padding: '11px 20px', color: 'var(--tx-3)', fontSize: 12, fontFamily: 'monospace' }}>{c.subject?.dateOfBirth || '—'}</td>
+                  <td style={{ padding: '11px 20px', letterSpacing: '0.12em', fontSize: 11, color: 'var(--tx-3)' }}>
+                    {(c.meta?.layersRun || []).map(l => LAYER_ABBR[l] || '?').join(' ')}
+                  </td>
+                  <td style={{ padding: '11px 20px', fontFamily: 'monospace', fontWeight: 700, fontSize: 13, color: RISK_COLOR[c.riskLevel] }}>{c.score}</td>
+                  <td style={{ padding: '11px 20px' }}><RiskBadge level={c.riskLevel} /></td>
+                  <td style={{ padding: '11px 20px', color: 'var(--tx-3)', fontSize: 12, fontFamily: 'monospace' }}>{new Date(c.createdAt).toISOString().slice(0, 10)}</td>
+                  <td style={{ padding: '11px 20px', color: 'var(--tx-3)', fontSize: 12 }}>View →</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
-    </div>
-  )
-}
 
-function StatCard({ label, value, valueColor = '#e6edf3', icon }) {
-  return (
-    <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '10px', padding: '20px 22px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
-        <span style={{ color: '#7d8590', fontSize: '12px', fontWeight: 500, letterSpacing: '0.03em' }}>{label}</span>
-        {icon}
+      <div style={{ marginTop: 12, fontSize: 11, color: 'var(--tx-3)' }}>
+        Layers — S: sanctions  P: pep  A: adverse media  C: corporate  K: crypto
       </div>
-      <div style={{ color: valueColor, fontSize: '34px', fontWeight: 700, fontFamily: 'monospace', lineHeight: 1 }}>{value}</div>
     </div>
   )
-}
-
-function scoreColor(level) {
-  return { HIGH: '#ff4d4d', MEDIUM: '#ffaa00', LOW: '#00e5a0' }[level] || '#e6edf3'
 }
 
 const S = {
-  btnPrimary: {
-    backgroundColor: '#00e5a0', border: 'none', borderRadius: '7px',
-    color: '#080b10', fontWeight: 700, cursor: 'pointer', letterSpacing: '0.03em',
+  primaryBtn: {
+    display: 'inline-flex', alignItems: 'center', gap: 7,
+    padding: '8px 16px', background: 'var(--accent)', border: 'none', borderRadius: 6,
+    color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', letterSpacing: '0.01em',
   },
 }

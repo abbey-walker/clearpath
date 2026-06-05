@@ -1,217 +1,204 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { AlertTriangle, ChevronDown, ChevronRight, ArrowLeft, Printer, CheckCircle, XCircle, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Printer, ChevronDown, ChevronRight, AlertTriangle } from 'lucide-react'
 import { getCheck } from '../lib/storage'
-import RiskBadge from '../components/RiskBadge'
 import ScoreGauge from '../components/ScoreGauge'
 
-const LAYER_META = {
-  sanctions:    { label: 'Sanctions & Watchlists' },
-  pep:          { label: 'PEP Screening' },
-  adverseMedia: { label: 'Adverse Media' },
-  corporate:    { label: 'Corporate Intelligence' },
-  crypto:       { label: 'Crypto Wallet' },
+const RISK_COLOR = { HIGH: 'var(--red)', MEDIUM: 'var(--amber)', LOW: 'var(--green)' }
+const LAYER_NAME = {
+  sanctions:    'Sanctions & Watchlists',
+  pep:          'PEP Screening',
+  adverseMedia: 'Adverse Media',
+  corporate:    'Corporate Intelligence',
+  crypto:       'Crypto Wallet',
 }
 
 export default function Report() {
   const { checkId } = useParams()
   const navigate = useNavigate()
   const [report, setReport] = useState(null)
-  const [expanded, setExpanded] = useState({})
+  const [open, setOpen] = useState({})
 
   useEffect(() => {
     const r = getCheck(checkId)
-    if (r) { setReport(r); setExpanded({}) }
+    if (r) setReport(r)
   }, [checkId])
 
-  if (!report) {
-    return (
-      <div style={{ padding: '60px', textAlign: 'center', color: '#7d8590' }}>
-        <p>Report not found.</p>
-        <button onClick={() => navigate('/dashboard')} style={{ ...S.btnSecondary, marginTop: '16px' }}>← Back to Dashboard</button>
-      </div>
-    )
-  }
+  if (!report) return (
+    <div style={{ padding: '40px', color: 'var(--tx-3)' }}>
+      Report not found.{' '}
+      <span style={{ color: 'var(--green)', cursor: 'pointer' }} onClick={() => navigate('/dashboard')}>← Back</span>
+    </div>
+  )
 
-  const toggle = key => setExpanded(p => ({ ...p, [key]: !p[key] }))
+  const riskColor = RISK_COLOR[report.riskLevel] || 'var(--tx-2)'
   const layers = Object.entries(report.layers || {}).filter(([, v]) => v)
+  const toggle = k => setOpen(p => ({ ...p, [k]: !p[k] }))
 
-  return (
-    <div style={{ padding: '36px 40px', maxWidth: '860px' }}>
-      {/* Header */}
-      <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '28px' }}>
-        <button onClick={() => navigate('/dashboard')} style={{ ...S.btnSecondary, display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', fontSize: '13px' }}>
-          <ArrowLeft size={14} /> Dashboard
-        </button>
-        <span style={{ color: '#4d5562', fontFamily: 'monospace', fontSize: '12px' }}>{report.checkId}</span>
-        <div style={{ marginLeft: 'auto' }}>
-          <button onClick={() => window.print()} style={{ ...S.btnSecondary, display: 'flex', alignItems: 'center', gap: '6px', padding: '7px 12px', fontSize: '13px' }}>
-            <Printer size={14} /> Export PDF
-          </button>
-        </div>
-      </div>
-
-      {/* Hard stop banner */}
-      {report.hardStop && (
-        <div style={{
-          backgroundColor: 'rgba(255,77,77,0.1)', border: '1px solid rgba(255,77,77,0.4)',
-          borderRadius: '10px', padding: '14px 18px', marginBottom: '22px',
-          display: 'flex', alignItems: 'center', gap: '12px',
-        }}>
-          <AlertTriangle size={20} color="#ff4d4d" style={{ flexShrink: 0 }} />
-          <div>
-            <div style={{ color: '#ff4d4d', fontWeight: 700, fontSize: '14px', marginBottom: '2px' }}>SANCTIONS HARD STOP</div>
-            <div style={{ color: '#e6edf3', fontSize: '13px' }}>
-              This subject matches a sanctioned entity. Onboarding must not proceed. This case must be escalated immediately to your compliance team.
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Risk summary card */}
-      <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '12px', padding: '28px', marginBottom: '20px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '32px' }}>
-          <ScoreGauge score={report.score} riskLevel={report.riskLevel} />
-
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '10px' }}>
-              <RiskBadge level={report.riskLevel} large />
-              <span style={{ color: '#e6edf3', fontSize: '20px', fontWeight: 700 }}>{report.subject?.fullName}</span>
-            </div>
-
-            <div style={{ display: 'flex', gap: '20px', marginBottom: '16px', flexWrap: 'wrap' }}>
-              {report.subject?.dateOfBirth && <Meta label="DOB" value={report.subject.dateOfBirth} mono />}
-              {report.subject?.nationality && <Meta label="Nationality" value={report.subject.nationality} mono />}
-              {report.subject?.walletAddress && <Meta label="Wallet" value={`${report.subject.walletAddress.slice(0,10)}…`} mono />}
-              <Meta label="Screened" value={new Date(report.createdAt).toLocaleString()} />
-              <Meta label="Duration" value={`${(report.durationMs / 1000).toFixed(1)}s`} mono />
-            </div>
-
-            <p style={{ color: '#7d8590', fontSize: '13px', margin: '0 0 16px', lineHeight: '1.5' }}>
-              {report.explanation}
-            </p>
-
-            {/* Score breakdown bar */}
-            <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
-              {(report.scoreBreakdown || []).filter(b => b.contribution > 0).map(b => (
-                <span key={b.layer} style={{
-                  backgroundColor: '#161b22', border: '1px solid #21262d',
-                  borderRadius: '5px', padding: '3px 8px',
-                  fontSize: '12px', color: '#e6edf3', fontFamily: 'monospace',
-                }}>
-                  {b.layer} +{b.contribution}
-                </span>
-              ))}
-              {(report.scoreBreakdown || []).every(b => !b.contribution) && (
-                <span style={{ color: '#4d5562', fontSize: '12px' }}>No risk signals detected</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Recommendations */}
-      {report.recommendations?.length > 0 && (
-        <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '10px', padding: '20px 24px', marginBottom: '20px' }}>
-          <h2 style={{ color: '#e6edf3', fontSize: '14px', fontWeight: 600, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle size={15} color="#00e5a0" /> Recommendations
-          </h2>
-          <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {report.recommendations.map((r, i) => (
-              <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', fontSize: '13px', color: '#e6edf3' }}>
-                <span style={{ color: '#00e5a0', marginTop: '1px', flexShrink: 0 }}>›</span>
-                {r}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Layer results */}
-      <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ color: '#e6edf3', fontSize: '14px', fontWeight: 600, margin: '0 0 12px' }}>Layer Results</h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          {layers.map(([key, layer]) => (
-            <LayerCard key={key} layerKey={key} layer={layer} expanded={expanded[key]} onToggle={() => toggle(key)} />
-          ))}
-        </div>
-      </div>
-
-      {/* Sources */}
-      <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '10px', padding: '16px 20px', marginBottom: '20px' }}>
-        <h3 style={{ color: '#7d8590', fontSize: '12px', fontWeight: 600, margin: '0 0 10px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>Sources Queried</h3>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {(report.meta?.sourcesQueried || []).map(s => (
-            <span key={s} style={{ backgroundColor: '#161b22', border: '1px solid #21262d', borderRadius: '4px', padding: '3px 8px', fontSize: '11px', color: '#7d8590' }}>{s}</span>
-          ))}
-        </div>
-      </div>
-
-      {/* Disclaimer */}
-      <p style={{ color: '#4d5562', fontSize: '11px', lineHeight: '1.6', margin: 0 }}>
-        {report.meta?.disclaimer}
-      </p>
-    </div>
-  )
-}
-
-function LayerCard({ layerKey, layer, expanded, onToggle }) {
-  const meta = LAYER_META[layerKey] || { label: layerKey }
-  const hasFindings = layer.status === 'error' || layer.hardStop || layer.pepConfirmed || (layer.findingsCount > 0) || layer.disqualifiedDirector
-
-  const statusIcon = layer.status === 'error'
-    ? <XCircle size={14} color="#ff4d4d" />
-    : hasFindings
-      ? <AlertCircle size={14} color="#ffaa00" />
-      : <CheckCircle size={14} color="#00e5a0" />
-
-  return (
-    <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', overflow: 'hidden' }}>
-      <button
-        onClick={onToggle}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-          padding: '14px 18px', background: 'none', border: 'none', cursor: 'pointer',
-          textAlign: 'left',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {statusIcon}
-          <span style={{ color: '#e6edf3', fontSize: '13px', fontWeight: 600 }}>{meta.label}</span>
-          <span style={{ color: '#4d5562', fontSize: '12px' }}>— {layer.summary}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {layer.scoreContribution > 0 && (
-            <span style={{ fontFamily: 'monospace', fontSize: '12px', color: '#ffaa00' }}>+{layer.scoreContribution}</span>
-          )}
-          <span style={{ color: '#7d8590', fontSize: '11px', fontFamily: 'monospace' }}>{layer.durationMs}ms</span>
-          {expanded ? <ChevronDown size={14} color="#7d8590" /> : <ChevronRight size={14} color="#7d8590" />}
-        </div>
-      </button>
-
-      {expanded && (
-        <div style={{ borderTop: '1px solid #21262d', padding: '16px 18px', backgroundColor: '#080b10' }}>
-          <pre style={{ margin: 0, fontFamily: 'monospace', fontSize: '11px', color: '#7d8590', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: '1.6' }}>
-            {JSON.stringify(layer, null, 2)}
-          </pre>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Meta({ label, value, mono = false }) {
   return (
     <div>
-      <div style={{ color: '#4d5562', fontSize: '11px', fontWeight: 500, marginBottom: '1px', letterSpacing: '0.05em' }}>{label}</div>
-      <div style={{ color: '#7d8590', fontSize: '12px', fontFamily: mono ? 'monospace' : 'inherit' }}>{value}</div>
+      {/* Topbar */}
+      <div className="no-print" style={{
+        position: 'sticky', top: 0, zIndex: 10,
+        display: 'flex', alignItems: 'center', gap: 12,
+        padding: '0 28px', height: 44,
+        background: 'var(--surface)', borderBottom: '1px solid var(--border)',
+      }}>
+        <button onClick={() => navigate('/dashboard')} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', color: 'var(--tx-3)', cursor: 'pointer', fontSize: 12, padding: '4px 0' }}>
+          <ArrowLeft size={13} /> Dashboard
+        </button>
+        <span style={{ color: 'var(--border)', fontSize: 16 }}>·</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, color: 'var(--tx-3)' }}>{report.checkId}</span>
+        <div style={{ flex: 1 }} />
+        <button onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'none', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--tx-3)', cursor: 'pointer', fontSize: 12, padding: '5px 12px' }}>
+          <Printer size={12} /> Export PDF
+        </button>
+      </div>
+
+      <div style={{ padding: '36px 40px', maxWidth: 820 }}>
+
+        {/* Hard stop */}
+        {report.hardStop && (
+          <div style={{ display: 'flex', gap: 14, padding: '14px 18px', background: 'rgba(255,77,77,0.06)', border: '1px solid rgba(255,77,77,0.25)', borderRadius: 8, marginBottom: 24 }}>
+            <AlertTriangle size={18} color="var(--red)" style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--red)', marginBottom: 2 }}>Sanctions hard stop</div>
+              <div style={{ fontSize: 12, color: 'var(--tx-2)', lineHeight: 1.6 }}>
+                This subject matches a sanctioned entity. Onboarding must not proceed. Escalate to your compliance officer immediately.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Hero ──────────────────────────────────────────── */}
+        <div style={{ display: 'flex', gap: 40, alignItems: 'flex-start', marginBottom: 32, paddingBottom: 32, borderBottom: '1px solid var(--border)' }}>
+          {/* Risk verdict — the money shot */}
+          <div style={{ flexShrink: 0, textAlign: 'center' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--tx-3)', marginBottom: 8 }}>
+              Risk level
+            </div>
+            <div style={{
+              fontSize: 72, fontWeight: 800, lineHeight: 1, color: riskColor,
+              letterSpacing: '-0.03em', fontVariantNumeric: 'tabular-nums',
+            }}>
+              {report.riskLevel}
+            </div>
+            <div style={{ marginTop: 12, fontSize: 13, color: 'var(--tx-3)', fontFamily: 'monospace' }}>
+              score: <span style={{ color: riskColor, fontWeight: 700 }}>{report.score}</span> / 100
+            </div>
+          </div>
+
+          {/* Subject meta + score gauge */}
+          <div style={{ flex: 1, paddingTop: 4 }}>
+            <h1 style={{ fontSize: 26, fontWeight: 700, color: 'var(--tx)', letterSpacing: '-0.02em', marginBottom: 12 }}>
+              {report.subject?.fullName}
+            </h1>
+
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 24px', marginBottom: 20 }}>
+              {[
+                report.subject?.dateOfBirth  && ['Date of birth', report.subject.dateOfBirth, true],
+                report.subject?.nationality  && ['Nationality', report.subject.nationality, false],
+                report.subject?.walletAddress && ['Wallet', `${report.subject.walletAddress.slice(0, 12)}…`, true],
+                ['Screened', new Date(report.createdAt).toLocaleString(), false],
+                ['Duration', `${(report.durationMs / 1000).toFixed(1)}s`, true],
+              ].filter(Boolean).map(([label, value, mono]) => (
+                <div key={label}>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 13, color: 'var(--tx-2)', fontFamily: mono ? 'monospace' : 'inherit' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            <ScoreGauge score={report.score} riskLevel={report.riskLevel} />
+
+            {report.explanation && (
+              <p style={{ marginTop: 14, fontSize: 12, color: 'var(--tx-3)', lineHeight: 1.7 }}>
+                {report.explanation}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Recommendations ──────────────────────────────── */}
+        {report.recommendations?.length > 0 && (
+          <div style={{ marginBottom: 28 }}>
+            <h2 style={S.sectionHead}>Recommendations</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {report.recommendations.map((r, i) => (
+                <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 6 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--tx-3)', minWidth: 18, paddingTop: 1, fontFamily: 'monospace' }}>{String(i + 1).padStart(2, '0')}</span>
+                  <span style={{ fontSize: 13, color: 'var(--tx-2)', lineHeight: 1.5 }}>{r}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Layer results ─────────────────────────────────── */}
+        <div style={{ marginBottom: 28 }}>
+          <h2 style={S.sectionHead}>Layer results</h2>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
+            {/* Header row */}
+            <div style={{ display: 'grid', gridTemplateColumns: COLS, padding: '8px 16px', borderBottom: '1px solid var(--border)', fontSize: 10, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+              <span>Layer</span><span>Result</span><span>Score</span><span>Time</span><span />
+            </div>
+            {layers.map(([key, layer], idx) => {
+              const hasIssue = layer.hardStop || layer.pepConfirmed || layer.findingsCount > 0 || layer.disqualifiedDirector || layer.status === 'error'
+              const dotColor = layer.status === 'error' ? 'var(--red)' : hasIssue ? 'var(--amber)' : 'var(--green)'
+              const isOpen = open[key]
+              return (
+                <div key={key} style={{ borderBottom: idx < layers.length - 1 ? '1px solid var(--border)' : 'none' }}>
+                  <div
+                    onClick={() => toggle(key)}
+                    style={{ display: 'grid', gridTemplateColumns: COLS, padding: '11px 16px', cursor: 'pointer', alignItems: 'center', transition: 'background 0.08s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'var(--raised)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: 'var(--tx)' }}>
+                      <span style={{ color: dotColor, fontSize: 8 }}>●</span>
+                      {LAYER_NAME[key] || key}
+                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--tx-3)' }}>{layer.summary}</span>
+                    <span style={{ fontSize: 12, fontFamily: 'monospace', fontWeight: 700, color: layer.scoreContribution > 0 ? 'var(--amber)' : 'var(--tx-3)' }}>
+                      {layer.scoreContribution > 0 ? `+${layer.scoreContribution}` : '—'}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--tx-3)', fontFamily: 'monospace' }}>{layer.durationMs}ms</span>
+                    <span style={{ color: 'var(--tx-3)', display: 'flex', justifyContent: 'flex-end' }}>
+                      {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </span>
+                  </div>
+                  {isOpen && (
+                    <div style={{ background: 'var(--bg)', borderTop: '1px solid var(--border)', padding: '14px 16px' }}>
+                      <pre style={{ margin: 0, fontSize: 11, color: 'var(--tx-3)', fontFamily: 'monospace', whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.8 }}>
+                        {JSON.stringify(layer, null, 2)}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Sources + disclaimer */}
+        <div style={{ padding: '14px 16px', background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, marginBottom: 16 }}>
+          <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 8 }}>Sources queried</div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {(report.meta?.sourcesQueried || []).map(s => (
+              <span key={s} style={{ fontSize: 11, color: 'var(--tx-3)', background: 'var(--raised)', border: '1px solid var(--border)', borderRadius: 4, padding: '2px 8px' }}>{s}</span>
+            ))}
+          </div>
+        </div>
+
+        <p style={{ fontSize: 11, color: 'var(--tx-3)', lineHeight: 1.7, opacity: 0.6 }}>
+          {report.meta?.disclaimer}
+        </p>
+      </div>
     </div>
   )
 }
 
+const COLS = '200px 1fr 70px 80px 32px'
 const S = {
-  btnSecondary: {
-    backgroundColor: '#161b22', border: '1px solid #21262d', borderRadius: '6px',
-    color: '#7d8590', cursor: 'pointer', fontWeight: 500,
-  },
+  sectionHead: { fontSize: 12, fontWeight: 600, color: 'var(--tx-3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 12 },
 }

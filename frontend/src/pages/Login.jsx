@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Shield } from 'lucide-react'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -17,49 +16,51 @@ export default function Login() {
 
   return (
     <div style={{
-      minHeight: '100vh', backgroundColor: '#080b10',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px',
+      minHeight: '100vh', background: 'var(--bg)',
+      display: 'grid', placeItems: 'center', padding: 24,
     }}>
-      <div style={{ width: '100%', maxWidth: '400px' }}>
+      <div style={{ width: '100%', maxWidth: 400 }}>
 
-        <div style={{ textAlign: 'center', marginBottom: '40px' }}>
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: '56px', height: '56px', borderRadius: '14px',
-            backgroundColor: 'rgba(0,229,160,0.1)',
-            border: '1px solid rgba(0,229,160,0.2)',
-            marginBottom: '16px',
-          }}>
-            <Shield size={26} color="#00e5a0" />
+        {/* Mark + wordmark */}
+        <div style={{ marginBottom: 48, textAlign: 'center' }}>
+          <svg width={40} height={40} viewBox="0 0 40 40" fill="none" style={{ marginBottom: 16 }}>
+            <circle cx={20} cy={20} r={19} stroke="var(--accent)" strokeWidth={1.5} />
+            <path d="M13 21l5.5 5.5L28 14" stroke="var(--accent)" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--tx)', letterSpacing: '-0.02em', marginBottom: 4 }}>
+            ClearPath
           </div>
-          <h1 style={{ fontFamily: 'monospace', fontWeight: 700, fontSize: '22px', letterSpacing: '0.1em', color: '#e6edf3', margin: '0 0 6px' }}>
-            CLEARPATH
-          </h1>
-          <p style={{ color: '#7d8590', fontSize: '13px', margin: 0 }}>AML / KYC Risk Intelligence Platform</p>
+          <div style={{ fontSize: 12, color: 'var(--tx-3)', letterSpacing: '0.05em' }}>
+            AML / KYC RISK INTELLIGENCE
+          </div>
         </div>
 
-        <div style={{ backgroundColor: '#0d1117', border: '1px solid #21262d', borderRadius: '12px', padding: '32px' }}>
-          <h2 style={{ color: '#e6edf3', fontSize: '17px', fontWeight: 600, margin: '0 0 22px' }}>Sign in to your account</h2>
+        {/* Form card */}
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 10, padding: '32px 28px' }}>
 
           {error && (
-            <div style={{ backgroundColor: 'rgba(255,77,77,0.08)', border: '1px solid rgba(255,77,77,0.25)', borderRadius: '6px', padding: '10px 12px', color: '#ff4d4d', fontSize: '13px', marginBottom: '16px' }}>
+            <div style={{ fontSize: 12, color: 'var(--red)', marginBottom: 18, padding: '8px 12px', background: 'rgba(255,77,77,0.06)', borderRadius: 5 }}>
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
-            <label style={S.label}>Email address</label>
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="analyst@yourfirm.com" style={{ ...S.input, marginBottom: '14px' }} />
-
-            <label style={S.label}>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" style={{ ...S.input, marginBottom: '22px' }} />
-
-            <button type="submit" style={S.btn}>Sign in</button>
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={S.label}>Email address</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="analyst@yourfirm.com" autoFocus style={S.input} />
+            </div>
+            <div>
+              <label style={S.label}>Password</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••" style={S.input} />
+            </div>
+            <button type="submit" style={S.btn}>Sign in →</button>
           </form>
         </div>
 
-        <p style={{ textAlign: 'center', color: '#4d5562', fontSize: '12px', marginTop: '20px' }}>
-          Authorised users only. All activity is logged and audited.
+        <p style={{ textAlign: 'center', color: 'var(--tx-3)', fontSize: 11, marginTop: 20 }}>
+          Authorised users only. All sessions are logged.
         </p>
       </div>
     </div>
@@ -67,15 +68,19 @@ export default function Login() {
 }
 
 const S = {
-  label: { display: 'block', color: '#7d8590', fontSize: '12px', fontWeight: 500, marginBottom: '6px', letterSpacing: '0.03em' },
+  label: {
+    display: 'block', fontSize: 11, fontWeight: 600,
+    color: 'var(--tx-3)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 6,
+  },
   input: {
-    width: '100%', backgroundColor: '#080b10', border: '1px solid #21262d',
-    borderRadius: '6px', padding: '10px 12px', color: '#e6edf3', fontSize: '14px',
-    outline: 'none', boxSizing: 'border-box', display: 'block',
+    display: 'block', width: '100%',
+    background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6,
+    padding: '9px 11px', color: 'var(--tx)', fontSize: 13, outline: 'none',
   },
   btn: {
-    width: '100%', backgroundColor: '#00e5a0', border: 'none', borderRadius: '7px',
-    padding: '12px', color: '#080b10', fontSize: '14px', fontWeight: 700,
-    cursor: 'pointer', letterSpacing: '0.04em',
+    width: '100%', marginTop: 4, padding: '11px',
+    background: 'var(--accent)', border: 'none', borderRadius: 7,
+    color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+    letterSpacing: '0.02em',
   },
 }
