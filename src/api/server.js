@@ -12,9 +12,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const { v4: uuidv4 } = require('uuid');
 
-const { runPipeline } = require('./pipeline/orchestrator');
-const { SubjectSchema } = require('./utils/schemas');
-const logger = require('./utils/logger');
+const { runPipeline } = require('../pipeline/orchestrator');
+const { SubjectSchema } = require('../utils/schemas');
+const logger = require('../utils/logger');
 
 const app = express();
 
