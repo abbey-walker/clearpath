@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
+import Landing from './pages/Landing'
 import Login from './pages/Login'
+import Signup from './pages/Signup'
 import Dashboard from './pages/Dashboard'
 import NewCheck from './pages/NewCheck'
 import Report from './pages/Report'
@@ -12,20 +14,23 @@ function ProtectedRoute({ children }) {
 }
 
 export default function App() {
+  const isAuthed = !!localStorage.getItem('clearpath_auth')
+
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      <Route path="/" element={
-        <ProtectedRoute>
-          <Layout />
-        </ProtectedRoute>
-      }>
-        <Route index element={<Navigate to="/dashboard" replace />} />
+      {/* Public */}
+      <Route path="/" element={isAuthed ? <Navigate to="/dashboard" replace /> : <Landing />} />
+      <Route path="/login" element={isAuthed ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/signup" element={isAuthed ? <Navigate to="/dashboard" replace /> : <Signup />} />
+
+      {/* Protected app */}
+      <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
         <Route path="dashboard" element={<Dashboard />} />
         <Route path="checks/new" element={<NewCheck />} />
         <Route path="checks/:checkId" element={<Report />} />
       </Route>
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+
+      <Route path="*" element={<Navigate to={isAuthed ? '/dashboard' : '/'} replace />} />
     </Routes>
   )
 }

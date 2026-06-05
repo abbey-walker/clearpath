@@ -84,7 +84,7 @@ async function runPipeline(subject, checkId = null) {
   const allLayers = [sanctionsResult, ...parallelResults];
 
   // ── SCORE ────────────────────────────────────────────────────────────────────
-  const scoring = scoreRiskReport(allLayers);
+  const scoring = scoreRiskReport(allLayers, subject);
 
   const durationMs = Date.now() - startTime;
 
@@ -94,6 +94,8 @@ async function runPipeline(subject, checkId = null) {
     createdAt: new Date().toISOString(),
     durationMs,
     status: 'complete',
+
+    checkLayers: subject.checkLayers || [],
 
     // Subject (sanitised — no internal metadata)
     subject: {

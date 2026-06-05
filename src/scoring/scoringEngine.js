@@ -21,51 +21,99 @@ function getRiskLevel(score) {
 }
 
 /**
- * Generate a plain-English explanation of the score.
+ * Generate a specific, analyst-style explanation of the score.
+ * Cites actual findings — positions held, article titles, keywords — so the
+ * reasoning behind every risk marker is transparent.
  */
-function buildExplanation(layers, score, riskLevel, hardStop) {
-  const lines = [];
+function buildExplanation(layers, score, riskLevel, hardStop, subject) {
+  const name = subject?.fullName || 'The subject';
+  const parts = [];
 
   if (hardStop) {
-    lines.push('This subject has been identified on one or more international sanctions lists. This is an automatic HIGH RISK designation requiring immediate compliance review.');
-    return lines.join(' ');
+    parts.push(`${name} has been identified on one or more international sanctions lists. This is an automatic HIGH risk designation - onboarding must not proceed.`);
+    const sanctions = layers.find(l => l.layer === 'sanctions');
+    if (sanctions?.hits?.length > 0) {
+      const hit = sanctions.hits[0];
+      parts.push(`Sanctions match: "${hit.matchedName || hit.caption}" (score ${hit.score?.toFixed(2) || 'n/a'}) via ${hit.sourceName || hit.source || 'sanctions database'}.`);
+    }
+    return parts.join(' ');
   }
 
-  if (riskLevel === 'LOW') {
-    lines.push('No significant risk signals were identified across the screened data sources.');
-  } else if (riskLevel === 'MEDIUM') {
-    lines.push('One or more risk signals were identified that require further review before onboarding.');
-  } else {
-    lines.push('Multiple significant risk signals were identified. Manual review and enhanced due diligence are required.');
-  }
+  // Opening verdict
+  parts.push(`${name} has been assigned a ${riskLevel} risk rating with a composite score of ${score}/100.`);
 
-  // Describe what contributed
-  const drivers = [];
-
-  const sanctions = layers.find(l => l.layer === 'sanctions');
-  if (sanctions?.requiresReview) drivers.push('possible sanctions list match');
-
+  // PEP — cite actual positions
   const pep = layers.find(l => l.layer === 'pep');
-  if (pep?.pepConfirmed) drivers.push(`confirmed PEP status (${pep.strongMatches?.[0]?.pepClassification?.label || 'political exposure'})`);
-  else if (pep?.requiresReview) drivers.push('possible PEP status');
-
-  const media = layers.find(l => l.layer === 'adverseMedia');
-  if (media?.criticalCount > 0) drivers.push(`${media.criticalCount} critical adverse media finding(s)`);
-  else if (media?.significantCount > 0) drivers.push(`${media.significantCount} significant adverse media finding(s)`);
-
-  const corporate = layers.find(l => l.layer === 'corporate');
-  if (corporate?.flags?.includes('DISQUALIFIED_DIRECTOR')) drivers.push('disqualified director status (UK)');
-  if (corporate?.flags?.includes('HIGH_RISK_JURISDICTION_EXPOSURE')) drivers.push('corporate exposure to high-risk jurisdictions');
-
-  const crypto = layers.find(l => l.layer === 'crypto');
-  if (crypto?.criticalFlagCount > 0) drivers.push(`${crypto.criticalFlagCount} critical crypto wallet risk flag(s)`);
-  else if (crypto?.highFlagCount > 0) drivers.push('elevated crypto wallet risk exposure');
-
-  if (drivers.length > 0) {
-    lines.push(`Primary risk drivers: ${drivers.join('; ')}.`);
+  if (pep?.pepConfirmed) {
+    const match = pep.strongMatches?.[0];
+    const classification = match?.pepClassification?.label || 'Political Exposure';
+    const positions = (match?.positions || []).filter(p => p !== 'politician').slice(0, 4);
+    if (positions.length > 0) {
+      parts.push(`${name} is a confirmed Politically Exposed Person (PEP) at the ${classification} tier, having held the following positions: ${positions.join(', ')}.`);
+    } else {
+      parts.push(`${name} is a confirmed Politically Exposed Person (PEP) at the ${classification} tier.`);
+    }
+    if (match?.country) parts.push(`Country of political exposure: ${match.country}.`);
+  } else if (pep?.requiresReview) {
+    const possible = pep.possibleMatches?.[0];
+    parts.push(`A possible PEP match was identified for "${possible?.matchedName || name}" - manual verification is required to confirm or dismiss.`);
   }
 
-  return lines.join(' ');
+  // Adverse media — cite top finding titles and keywords
+  const media = layers.find(l => l.layer === 'adverseMedia');
+  if (media?.findings?.length > 0) {
+    const total = media.findingsCount;
+    const breakdown = [
+      media.criticalCount > 0 && `${media.criticalCount} critical`,
+      media.significantCount > 0 && `${media.significantCount} significant`,
+      media.notableCount > 0 && `${media.notableCount} notable`,
+    ].filter(Boolean).join(', ');
+
+    parts.push(`Adverse media screening returned ${total} finding(s) (${breakdown}).`);
+
+    // Cite up to 2 specific findings
+    media.findings.slice(0, 2).forEach(f => {
+      const kws = f.keywords?.slice(0, 3).join(', ');
+      const via = f.sourceName || f.source;
+      if (f.title) {
+        parts.push(`${f.severity} finding via ${via}: "${f.title}"${kws ? ` - keywords: ${kws}` : ''}.`);
+      }
+    });
+  }
+
+  // Sanctions possible match
+  const sanctions = layers.find(l => l.layer === 'sanctions');
+  if (sanctions?.requiresReview && !hardStop) {
+    parts.push(`A possible sanctions list match requires review before proceeding.`);
+  }
+
+  // Corporate
+  const corporate = layers.find(l => l.layer === 'corporate');
+  if (corporate?.flags?.includes('DISQUALIFIED_DIRECTOR')) {
+    parts.push(`Subject appears on the UK Disqualified Directors Register.`);
+  }
+  if (corporate?.flags?.includes('HIGH_RISK_JURISDICTION_EXPOSURE')) {
+    parts.push(`Corporate connections to high-risk jurisdictions were identified.`);
+  }
+
+  // Crypto
+  const crypto = layers.find(l => l.layer === 'crypto');
+  if (crypto?.criticalFlagCount > 0) {
+    parts.push(`${crypto.criticalFlagCount} critical on-chain risk flag(s) were identified against the provided wallet address.`);
+  } else if (crypto?.highFlagCount > 0) {
+    parts.push(`Elevated on-chain risk exposure was detected for the provided wallet address.`);
+  }
+
+  // Closing
+  if (riskLevel === 'HIGH') {
+    parts.push(`Enhanced due diligence and senior compliance sign-off are required. Do not onboard without MLRO review.`);
+  } else if (riskLevel === 'MEDIUM') {
+    parts.push(`Enhanced due diligence is recommended before any onboarding decision.`);
+  } else {
+    parts.push(`No significant risk signals were identified. Standard onboarding procedures apply, subject to your internal policy.`);
+  }
+
+  return parts.join(' ');
 }
 
 /**
@@ -76,7 +124,7 @@ function buildRecommendations(riskLevel, layers, hardStop) {
 
   if (hardStop) {
     return [
-      'DO NOT ONBOARD — refer immediately to your MLRO (Money Laundering Reporting Officer)',
+      'DO NOT ONBOARD - refer immediately to your MLRO (Money Laundering Reporting Officer)',
       'File a Suspicious Activity Report (SAR) as required by applicable AML regulations',
       'Document all findings and retain for a minimum of 5 years',
       'Do not inform the subject that a SAR has been filed (tipping off offence)',
@@ -99,7 +147,7 @@ function buildRecommendations(riskLevel, layers, hardStop) {
   if (riskLevel === 'HIGH') {
     actions.push('Do not onboard without explicit senior compliance sign-off');
     actions.push('Escalate to MLRO immediately');
-    actions.push('Conduct Enhanced Due Diligence (EDD) — source of funds, source of wealth');
+    actions.push('Conduct Enhanced Due Diligence (EDD) - source of funds, source of wealth');
     actions.push('Consider filing a Suspicious Activity Report (SAR)');
   }
 
@@ -126,7 +174,7 @@ function buildRecommendations(riskLevel, layers, hardStop) {
  * @param {object[]} layerResults - Array of results from each pipeline layer
  * @returns {object} Final scored risk report
  */
-function scoreRiskReport(layerResults) {
+function scoreRiskReport(layerResults, subject) {
   logger.debug('Scoring engine: calculating composite risk score');
 
   const completedLayers = layerResults.filter(l => l.status === 'complete' || l.status === 'error');
@@ -139,7 +187,7 @@ function scoreRiskReport(layerResults) {
       score: 100,
       riskLevel: 'HIGH',
       hardStop: true,
-      explanation: buildExplanation(completedLayers, 100, 'HIGH', true),
+      explanation: buildExplanation(completedLayers, 100, 'HIGH', true, subject),
       recommendations: buildRecommendations('HIGH', completedLayers, true),
       scoreBreakdown: completedLayers.map(l => ({
         layer: l.layer,
@@ -167,7 +215,7 @@ function scoreRiskReport(layerResults) {
     score: Math.round(totalScore),
     riskLevel,
     hardStop: false,
-    explanation: buildExplanation(completedLayers, totalScore, riskLevel, false),
+    explanation: buildExplanation(completedLayers, totalScore, riskLevel, false, subject),
     recommendations: buildRecommendations(riskLevel, completedLayers, false),
     scoreBreakdown: layerContributions,
     dataQualityNote: completedLayers.some(l => l.status === 'error')

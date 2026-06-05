@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Loader } from 'lucide-react'
 import { submitCheck } from '../lib/api'
 import { saveCheck } from '../lib/storage'
@@ -30,10 +30,25 @@ const LAYERS = [
 
 export default function NewCheck() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const prefill = location.state?.prefill
+  const prefillLayers = location.state?.layers
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({ fullName: '', dateOfBirth: '', nationality: '', walletAddress: '' })
-  const [layers, setLayers] = useState({ sanctions: true, pep: true, adverseMedia: true, corporate: false, crypto: false })
+  const [form, setForm] = useState({
+    fullName: prefill?.fullName || '',
+    dateOfBirth: prefill?.dateOfBirth || '',
+    nationality: prefill?.nationality || '',
+    walletAddress: prefill?.walletAddress || '',
+  })
+  const [layers, setLayers] = useState({
+    sanctions: true,
+    pep: prefillLayers ? prefillLayers.includes('pep') : true,
+    adverseMedia: prefillLayers ? prefillLayers.includes('adverseMedia') : true,
+    corporate: prefillLayers ? prefillLayers.includes('corporate') : false,
+    crypto: prefillLayers ? prefillLayers.includes('crypto') : false,
+  })
 
   const set = f => e => setForm(p => ({ ...p, [f]: e.target.value }))
 
@@ -52,7 +67,7 @@ export default function NewCheck() {
       saveCheck(report)
       navigate(`/checks/${report.checkId}`)
     } catch (err) {
-      setError(err.response?.data?.error || err.message || 'Pipeline error — is the backend running on port 3001?')
+      setError(err.response?.data?.error || err.message || 'Pipeline error - is the backend running on port 3001?')
       setLoading(false)
     }
   }
@@ -65,6 +80,12 @@ export default function NewCheck() {
         </h1>
         <p style={{ fontSize: 12, color: 'var(--tx-3)' }}>Enter subject details and select which layers to run.</p>
       </div>
+
+      {prefill && (
+        <div style={{ padding: '9px 14px', background: 'rgba(123,104,238,0.06)', border: '1px solid rgba(123,104,238,0.2)', borderRadius: 6, color: 'var(--accent)', fontSize: 12, marginBottom: 16 }}>
+          Editing previous check for <strong>{prefill.fullName}</strong> - modify fields below and rerun. A new report will be created.
+        </div>
+      )}
 
       {error && (
         <div style={{ padding: '10px 14px', background: 'rgba(255,77,77,0.06)', border: '1px solid rgba(255,77,77,0.18)', borderRadius: 6, color: 'var(--red)', fontSize: 12, marginBottom: 20 }}>
@@ -90,7 +111,7 @@ export default function NewCheck() {
             <div>
               <label style={S.label}>Nationality <Opt /></label>
               <select value={form.nationality} onChange={set('nationality')} style={{ ...S.input, appearance: 'none' }}>
-                <option value="">— Select country —</option>
+                <option value="">Select country</option>
                 {NATIONALITIES.map(([c, n]) => <option key={c} value={c}>{n}</option>)}
               </select>
             </div>
@@ -155,7 +176,7 @@ export default function NewCheck() {
           transition: 'all 0.15s',
         }}>
           {loading
-            ? <><Loader size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Running screening check… (this takes ~8 seconds)</>
+            ? <><Loader size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> Running screening check…</>
             : 'Run screening check →'
           }
         </button>

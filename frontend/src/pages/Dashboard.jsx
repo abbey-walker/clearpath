@@ -7,6 +7,13 @@ import RiskBadge from '../components/RiskBadge'
 const RISK_COLOR = { HIGH: 'var(--red)', MEDIUM: 'var(--amber)', LOW: 'var(--green)' }
 const LAYER_ABBR  = { sanctions: 'S', pep: 'P', adverseMedia: 'A', corporate: 'C', crypto: 'K' }
 
+function formatDateAU(dateStr) {
+  if (!dateStr) return '-'
+  const [y, m, d] = String(dateStr).split('-')
+  if (!d) return dateStr
+  return `${d}/${m}/${y}`
+}
+
 export default function Dashboard() {
   const navigate = useNavigate()
   const [checks, setChecks] = useState([])
@@ -84,7 +91,7 @@ export default function Dashboard() {
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                 >
                   <td style={{ padding: '11px 20px', color: 'var(--tx)', fontWeight: 500, fontSize: 13 }}>{c.subject?.fullName}</td>
-                  <td style={{ padding: '11px 20px', color: 'var(--tx-3)', fontSize: 12, fontFamily: 'monospace' }}>{c.subject?.dateOfBirth || '—'}</td>
+                  <td style={{ padding: '11px 20px', color: 'var(--tx-3)', fontSize: 12, fontFamily: 'monospace' }}>{c.subject?.dateOfBirth ? formatDateAU(c.subject.dateOfBirth) : '-'}</td>
                   <td style={{ padding: '11px 20px', letterSpacing: '0.12em', fontSize: 11, color: 'var(--tx-3)' }}>
                     {(c.meta?.layersRun || []).map(l => LAYER_ABBR[l] || '?').join(' ')}
                   </td>
@@ -100,7 +107,7 @@ export default function Dashboard() {
       </div>
 
       <div style={{ marginTop: 12, fontSize: 11, color: 'var(--tx-3)' }}>
-        Layers — S: sanctions  P: pep  A: adverse media  C: corporate  K: crypto
+        Layers - S: sanctions  P: pep  A: adverse media  C: corporate  K: crypto
       </div>
     </div>
   )

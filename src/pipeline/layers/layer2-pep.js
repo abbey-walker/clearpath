@@ -142,6 +142,33 @@ async function queryOpenSanctionsPep(subject) {
   }
 }
 
+// Maps ISO-3166 nationality codes to Wikidata country label substrings.
+const NATIONALITY_COUNTRY_MAP = {
+  AU: ['australia'], GB: ['united kingdom', 'great britain', 'england', 'scotland', 'wales'],
+  US: ['united states'], NZ: ['new zealand'], CA: ['canada'], IE: ['ireland'],
+  DE: ['germany'], FR: ['france'], IT: ['italy'], ES: ['spain'], NL: ['netherlands'],
+  BE: ['belgium'], CH: ['switzerland'], AT: ['austria'], SE: ['sweden'],
+  NO: ['norway'], DK: ['denmark'], FI: ['finland'], JP: ['japan'], CN: ['china'],
+  IN: ['india'], SG: ['singapore'], HK: ['hong kong'], ZA: ['south africa'],
+  BR: ['brazil'], MX: ['mexico'], RU: ['russia'], AE: ['united arab emirates'],
+  SA: ['saudi arabia'], NG: ['nigeria'], KE: ['kenya'], PK: ['pakistan'],
+  PH: ['philippines'], MY: ['malaysia'], TH: ['thailand'], ID: ['indonesia'],
+  TR: ['turkey'], PL: ['poland'], PT: ['portugal'], GR: ['greece'],
+  IL: ['israel'], EG: ['egypt'], MA: ['morocco'], QA: ['qatar'], KW: ['kuwait'],
+};
+
+/**
+ * Returns true if the Wikidata country label matches the subject's nationality,
+ * false if they conflict, null if we can't determine (missing data).
+ */
+function wikidataCountryMatchesNationality(wikidataCountry, subjectNationality) {
+  if (!wikidataCountry || !subjectNationality) return null;
+  const country = wikidataCountry.toLowerCase();
+  const expected = NATIONALITY_COUNTRY_MAP[subjectNationality] || [];
+  if (expected.length === 0) return null;
+  return expected.some(c => country.includes(c));
+}
+
 /**
  * Wikidata query for politicians — free, no API key required.
  *
@@ -194,16 +221,18 @@ async function queryWikidata(subject) {
     const response = await axios.get('https://query.wikidata.org/sparql', {
       params: { query, format: 'json' },
       headers: { 'User-Agent': 'ClearPath-KYC/1.0 (compliance screening tool)' },
-      timeout: 10000,
+      timeout: 25000,
     });
     return response.data?.results?.bindings || [];
   }
 
   try {
-    const [exactBindings, looseBindings] = await Promise.all([
-      runSparql(exactQuery).catch(() => []),
-      runSparql(looseQuery).catch(() => []),
-    ]);
+    // Run exact query first — only fall back to loose if it returns nothing.
+    // Sequential avoids doubling SPARQL load on the free Wikidata endpoint.
+    const exactBindings = await runSparql(exactQuery).catch(() => []);
+    const looseBindings = exactBindings.length === 0
+      ? await runSparql(looseQuery).catch(() => [])
+      : [];
 
     // Collect all bindings, grouping multiple positions per person.
     // The earlier implementation deduped by entityId too early, dropping
@@ -237,6 +266,8 @@ async function queryWikidata(subject) {
       looseBindings.forEach(b => collectBinding(b, false));
     }
 
+    const subjectBirthYear = subject.dateOfBirth ? parseInt(subject.dateOfBirth.slice(0, 4)) : null;
+
     return Object.values(byPerson)
       .filter(p => {
         const n = p.matchedName.toLowerCase();
@@ -245,8 +276,34 @@ async function queryWikidata(subject) {
       .map(p => {
         const nameMatch = p.matchedName.toLowerCase();
         const bothNamesPresent = nameMatch.includes(firstName) && nameMatch.includes(lastName);
-        const verdict = (p.isExact || bothNamesPresent) ? 'STRONG_MATCH' : 'POSSIBLE_MATCH';
         const pepClassification = classifyPepPosition([], p.positions);
+
+        // ── Cross-reference: birth date ──────────────────────────────────────
+        const wikidataBirthYear = p.birthDate ? parseInt(p.birthDate.slice(0, 4)) : null;
+
+        // Discard if Wikidata birth year exists and clearly doesn't match subject
+        if (wikidataBirthYear && subjectBirthYear) {
+          if (Math.abs(wikidataBirthYear - subjectBirthYear) > 2) return null;
+        }
+        // Discard if this is clearly a historical figure and subject is alive today
+        if (wikidataBirthYear && wikidataBirthYear < 1900) return null;
+
+        // ── Cross-reference: nationality / country ───────────────────────────
+        const countryMatch = wikidataCountryMatchesNationality(p.country, subject.nationality);
+        // If we have both and they conflict, demote — don't discard (Wikidata country data is imperfect)
+        const hasCountryMismatch = countryMatch === false;
+
+        // ── Verdict ──────────────────────────────────────────────────────────
+        // Exact name + no country conflict → STRONG_MATCH
+        // Exact name + country mismatch → POSSIBLE_MATCH (different person, same name)
+        // Both names present + no conflict → STRONG_MATCH
+        // Anything else → POSSIBLE_MATCH
+        let verdict;
+        if ((p.isExact || bothNamesPresent) && !hasCountryMismatch) {
+          verdict = 'STRONG_MATCH';
+        } else {
+          verdict = 'POSSIBLE_MATCH';
+        }
 
         return {
           source: 'WIKIDATA',
@@ -258,10 +315,12 @@ async function queryWikidata(subject) {
           entityId: p.entityId,
           url: p.url,
           verdict,
-          score: p.isExact ? 0.95 : bothNamesPresent ? 0.8 : 0.55,
+          score: verdict === 'STRONG_MATCH' ? (p.isExact ? 0.95 : 0.8) : 0.55,
           pepClassification,
+          _countryMismatch: hasCountryMismatch || undefined,
         };
-      });
+      })
+      .filter(Boolean);
 
   } catch (err) {
     logger.warn('Wikidata query failed — skipping', { error: err.message });
