@@ -266,20 +266,112 @@ async function checkInsolvencyRegister(subject) {
 }
 
 /**
+ * GDELT Global News search — free, no API key, international coverage.
+ * Good for non-UK/US subjects where FCA/SEC/Insolvency won't apply.
+ */
+async function searchGdelt(subject) {
+  try {
+    const response = await axios.get('https://api.gdeltproject.org/api/v2/doc/doc', {
+      params: {
+        query: `"${subject.fullName}"`,
+        mode: 'artlist',
+        maxrecords: 25,
+        format: 'json',
+        sort: 'HybridRel',
+      },
+      timeout: 15000,
+    });
+
+    const articles = response.data?.articles || [];
+
+    return articles
+      .map(article => {
+        const text = `${article.title || ''} ${article.seendate || ''}`;
+        const severityResult = scoreArticleSeverity(text);
+        if (!severityResult) return null;
+
+        return {
+          source: 'GDELT',
+          sourceName: 'GDELT Global News',
+          title: article.title,
+          url: article.url,
+          publishedAt: article.seendate || null,
+          relevanceScore: 0.75,
+          ...severityResult,
+        };
+      })
+      .filter(Boolean);
+
+  } catch (err) {
+    logger.warn('GDELT search failed — skipping', { error: err.message });
+    return [];
+  }
+}
+
+/**
+ * Google Custom Search — requires GOOGLE_CSE_API_KEY + GOOGLE_CSE_ID env vars.
+ * Searches the open web for adverse coverage with targeted query.
+ */
+async function searchGoogle(subject) {
+  const apiKey = process.env.GOOGLE_CSE_API_KEY;
+  const cseId  = process.env.GOOGLE_CSE_ID;
+  if (!apiKey || !cseId) {
+    logger.debug('GOOGLE_CSE_API_KEY / GOOGLE_CSE_ID not set — skipping Google search');
+    return [];
+  }
+
+  const query = `"${subject.fullName}" (scandal OR fraud OR corruption OR investigation OR controversy OR arrested OR convicted OR bribery OR "money laundering")`;
+
+  try {
+    const response = await axios.get('https://www.googleapis.com/customsearch/v1', {
+      params: { key: apiKey, cx: cseId, q: query, num: 10 },
+      timeout: 8000,
+    });
+
+    const items = response.data?.items || [];
+
+    return items
+      .map(item => {
+        const text = `${item.title || ''} ${item.snippet || ''}`;
+        const severityResult = scoreArticleSeverity(text);
+        if (!severityResult) return null;
+
+        return {
+          source: 'GOOGLE_CSE',
+          sourceName: 'Google Web Search',
+          title: item.title,
+          summary: item.snippet,
+          url: item.link,
+          publishedAt: null,
+          relevanceScore: 0.8,
+          ...severityResult,
+        };
+      })
+      .filter(Boolean);
+
+  } catch (err) {
+    logger.warn('Google CSE search failed — skipping', { error: err.message });
+    return [];
+  }
+}
+
+/**
  * Main Layer 3 runner.
  */
 async function runAdverseMediaLayer(subject) {
   logger.debug('Layer 3: Adverse media screening started', { subject: subject.fullName });
   const startTime = Date.now();
 
-  const [newsHits, fcaHits, secHits, insolvencyHits] = await Promise.all([
+  const [newsHits, fcaHits, secHits, insolvencyHits, gdeltHits, googleHits] = await Promise.all([
     searchNewsApi(subject),
     checkFcaEnforcement(subject),
     checkSecEnforcement(subject),
     checkInsolvencyRegister(subject),
+    searchGdelt(subject),
+    searchGoogle(subject),
   ]);
 
-  const allFindings = [...newsHits, ...fcaHits, ...secHits, ...insolvencyHits];
+  const allFindings = [...newsHits, ...fcaHits, ...secHits, ...insolvencyHits, ...gdeltHits, ...googleHits];
 
   // Deduplicate by URL
   const seen = new Set();
@@ -319,7 +411,7 @@ async function runAdverseMediaLayer(subject) {
       ? 'No adverse media findings.'
       : `${deduped.length} adverse media finding(s): ${criticalCount} critical, ${significantCount} significant, ${notableCount} notable.`,
 
-    sourcesQueried: ['NewsAPI', 'FCA Register', 'SEC EDGAR', 'UK Insolvency Register'],
+    sourcesQueried: ['NewsAPI', 'GDELT Global News', 'Google Web Search', 'FCA Register', 'SEC EDGAR', 'UK Insolvency Register'],
   };
 
   logger.debug('Layer 3: Complete', {

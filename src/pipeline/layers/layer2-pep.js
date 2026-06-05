@@ -36,15 +36,27 @@ const PEP_RISK_TIERS = {
 };
 
 /**
- * Map OpenSanctions position/dataset strings to our PEP tier classification
+ * Map position/dataset strings to our PEP tier classification.
+ * Handles both OpenSanctions snake_case identifiers and natural-language
+ * Wikidata position labels (e.g. "Prime Minister of Australia").
  */
 function classifyPepPosition(datasets = [], positions = []) {
   const allText = [...datasets, ...positions].join(' ').toLowerCase();
 
-  if (allText.includes('head_of_state') || allText.includes('president') || allText.includes('prime_minister')) {
+  if (
+    allText.includes('head_of_state') || allText.includes('head of state') ||
+    allText.includes('prime_minister') || allText.includes('prime minister') ||
+    allText.includes('president') || allText.includes('chancellor') ||
+    allText.includes('premier') || allText.includes('head of government')
+  ) {
     return PEP_RISK_TIERS.HEAD_OF_STATE;
   }
-  if (allText.includes('minister') || allText.includes('senator') || allText.includes('parliament')) {
+  if (
+    allText.includes('minister') || allText.includes('senator') ||
+    allText.includes('parliament') || allText.includes('congressman') ||
+    allText.includes('member of') || allText.includes('deputy') ||
+    allText.includes('secretary of state') || allText.includes('governor')
+  ) {
     return PEP_RISK_TIERS.SENIOR_POLITICIAN;
   }
   if (allText.includes('military') || allText.includes('general') || allText.includes('admiral')) {
@@ -131,22 +143,30 @@ async function queryOpenSanctionsPep(subject) {
 }
 
 /**
- * Wikidata query for senior politicians — free, no API key required.
- * Uses SPARQL to find persons in political positions matching the name.
+ * Wikidata query for politicians — free, no API key required.
+ *
+ * Two passes:
+ *  1. Exact English label match → STRONG_MATCH (high confidence)
+ *  2. First + last name both present → POSSIBLE_MATCH (needs review)
+ *
+ * Previous version used `wdt:P279* wd:Q30461` (subclass of head of government)
+ * which fails for most political offices — they use P31 (instance of), not P279.
+ * Now we match on politician occupation (Q82955) or any held position (P39).
  */
 async function queryWikidata(subject) {
-  const nameParts = subject.fullName.split(' ');
-  const lastName = nameParts[nameParts.length - 1];
+  const nameParts = subject.fullName.trim().split(/\s+/);
+  const lastName  = nameParts[nameParts.length - 1].toLowerCase();
+  const firstName = nameParts[0].toLowerCase();
+  const fullNameLower = subject.fullName.toLowerCase();
 
-  // SPARQL query: find humans with political positions whose name contains the subject's last name
-  const sparqlQuery = `
-    SELECT ?person ?personLabel ?positionLabel ?countryLabel ?birthDate WHERE {
+  // Pass 1: exact label match + politician or any held office
+  const exactQuery = `
+    SELECT DISTINCT ?person ?personLabel ?positionLabel ?countryLabel ?birthDate WHERE {
       ?person wdt:P31 wd:Q5 .
-      ?person wdt:P39 ?position .
-      ?position wdt:P279* wd:Q30461 .
-      ?person rdfs:label ?name .
-      FILTER(CONTAINS(LCASE(?name), "${lastName.toLowerCase()}"))
-      FILTER(LANG(?name) = "en")
+      ?person rdfs:label "${subject.fullName}"@en .
+      { ?person wdt:P39 ?position . }
+      UNION
+      { ?person wdt:P106/wdt:P279* wd:Q82955 . BIND(wd:Q82955 AS ?position) }
       OPTIONAL { ?person wdt:P569 ?birthDate }
       OPTIONAL { ?person wdt:P27 ?country }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
@@ -154,34 +174,94 @@ async function queryWikidata(subject) {
     LIMIT 10
   `;
 
-  try {
+  // Pass 2: loose last-name match for politicians (catches name variants)
+  const looseQuery = `
+    SELECT DISTINCT ?person ?personLabel ?positionLabel ?countryLabel ?birthDate WHERE {
+      ?person wdt:P31 wd:Q5 .
+      ?person wdt:P106/wdt:P279* wd:Q82955 .
+      ?person rdfs:label ?name .
+      FILTER(LANG(?name) = "en")
+      FILTER(CONTAINS(LCASE(?name), "${lastName}"))
+      OPTIONAL { ?person wdt:P39 ?position }
+      OPTIONAL { ?person wdt:P569 ?birthDate }
+      OPTIONAL { ?person wdt:P27 ?country }
+      SERVICE wikibase:label { bd:serviceParam wikibase:language "en" }
+    }
+    LIMIT 20
+  `;
+
+  async function runSparql(query) {
     const response = await axios.get('https://query.wikidata.org/sparql', {
-      params: { query: sparqlQuery, format: 'json' },
+      params: { query, format: 'json' },
       headers: { 'User-Agent': 'ClearPath-KYC/1.0 (compliance screening tool)' },
-      timeout: 8000,
+      timeout: 10000,
     });
+    return response.data?.results?.bindings || [];
+  }
 
-    const bindings = response.data?.results?.bindings || [];
+  try {
+    const [exactBindings, looseBindings] = await Promise.all([
+      runSparql(exactQuery).catch(() => []),
+      runSparql(looseQuery).catch(() => []),
+    ]);
 
-    return bindings
-      .filter(b => {
-        // Basic name check against full subject name
-        const wikidataName = b.personLabel?.value || '';
-        const subjectName = subject.fullName.toLowerCase();
-        return wikidataName.toLowerCase().includes(lastName.toLowerCase());
+    // Collect all bindings, grouping multiple positions per person.
+    // The earlier implementation deduped by entityId too early, dropping
+    // e.g. "Prime Minister of Australia" in favour of the first binding ("MP").
+    const byPerson = {};
+
+    const collectBinding = (b, isExact) => {
+      const entityId = b.person?.value?.split('/').pop();
+      if (!entityId) return;
+      if (!byPerson[entityId]) {
+        byPerson[entityId] = {
+          entityId,
+          matchedName: b.personLabel?.value || '',
+          positions: [],
+          country: b.countryLabel?.value || null,
+          birthDate: b.birthDate?.value?.slice(0, 10) || null,
+          url: b.person?.value,
+          isExact,
+        };
+      }
+      const pos = b.positionLabel?.value;
+      if (pos && !byPerson[entityId].positions.includes(pos)) {
+        byPerson[entityId].positions.push(pos);
+      }
+    };
+
+    exactBindings.forEach(b => collectBinding(b, true));
+
+    // Loose results only supplement if exact pass found nothing
+    if (exactBindings.length === 0) {
+      looseBindings.forEach(b => collectBinding(b, false));
+    }
+
+    return Object.values(byPerson)
+      .filter(p => {
+        const n = p.matchedName.toLowerCase();
+        return n.includes(firstName) && n.includes(lastName);
       })
-      .map(b => ({
-        source: 'WIKIDATA',
-        sourceName: 'Wikidata Political Positions',
-        matchedName: b.personLabel?.value,
-        position: b.positionLabel?.value,
-        country: b.countryLabel?.value,
-        birthDate: b.birthDate?.value?.slice(0, 10) || null,
-        entityId: b.person?.value?.split('/').pop(),
-        url: b.person?.value,
-        verdict: 'POSSIBLE_MATCH', // Wikidata matches always need human verification
-        score: 0.6,
-      }));
+      .map(p => {
+        const nameMatch = p.matchedName.toLowerCase();
+        const bothNamesPresent = nameMatch.includes(firstName) && nameMatch.includes(lastName);
+        const verdict = (p.isExact || bothNamesPresent) ? 'STRONG_MATCH' : 'POSSIBLE_MATCH';
+        const pepClassification = classifyPepPosition([], p.positions);
+
+        return {
+          source: 'WIKIDATA',
+          sourceName: 'Wikidata Political Positions',
+          matchedName: p.matchedName,
+          positions: p.positions,
+          country: p.country,
+          birthDate: p.birthDate,
+          entityId: p.entityId,
+          url: p.url,
+          verdict,
+          score: p.isExact ? 0.95 : bothNamesPresent ? 0.8 : 0.55,
+          pepClassification,
+        };
+      });
 
   } catch (err) {
     logger.warn('Wikidata query failed — skipping', { error: err.message });
